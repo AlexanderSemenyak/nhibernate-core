@@ -1,3 +1,5 @@
+original: https://github.com/nhibernate/nhibernate-core
+
 Welcome to NHibernate
 =====================
 
