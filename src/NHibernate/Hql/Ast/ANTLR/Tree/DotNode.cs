@@ -18,7 +18,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 	/// Ported by: Steve Strong
 	/// </summary>
 	[CLSCompliant(false)]
-	public class DotNode : FromReferenceNode 
+	public class DotNode : FromReferenceNode, IExpectedTypeAwareNode
 	{
 		private static readonly INHibernateLogger Log = NHibernateLogger.For(typeof(DotNode));
 
@@ -71,6 +71,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 		/// The type of join to create.   Default is an inner join.
 		/// </summary>
 		private JoinType _joinType = JoinType.InnerJoin;
+
+		private object _constantValue;
 
 		public DotNode(IToken token) : base(token)
 		{
@@ -126,10 +128,18 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 		internal bool SkipSemiResolve { get; set; }
 
+		// Since v5.4
+		[Obsolete("Use overload with aliasCreator parameter instead.")]
 		public override void SetScalarColumnText(int i)
 		{
 			string[] sqlColumns = GetColumns();
 			ColumnHelper.GenerateScalarColumns(Walker.ASTFactory, this, sqlColumns, i);
+		}
+
+		/// <inheritdoc />
+		public override string[] SetScalarColumnText(int i, Func<int, int, string> aliasCreator)
+		{
+			return ColumnHelper.GenerateScalarColumns(ASTFactory, this, GetColumns(), i, aliasCreator);
 		}
 
 		public override void ResolveIndex(IASTNode parent) 
@@ -279,11 +289,14 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			return DataType;
 		}
 
-		public void SetResolvedConstant(string text)
+		public void SetResolvedConstant(string text) => SetResolvedConstant(text, null);
+
+		public void SetResolvedConstant(string text, object value)
 		{
 			_path = text;
 			_dereferenceType = DerefJavaConstant;
 			IsResolved = true; // Don't resolve the node again.
+			_constantValue = value;
 		}
 
 		private static QueryException BuildIllegalCollectionDereferenceException(string propertyName, IASTNode lhs)
@@ -390,7 +403,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			bool joinIsNeeded;
 
 			//For nullable entity comparisons we always need to add join (like not constrained one-to-one or not-found ignore associations)
-			bool comparisonWithNullableEntity = entityType.IsNullable && Walker.IsComparativeExpressionClause;
+			bool comparisonWithNullableEntity = entityType.IsNullable && Walker.IsComparativeExpressionClause && !IsCorrelatedSubselect;
 
 			if ( IsDotNode( parent ) ) 
 			{
@@ -418,8 +431,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 			if ( joinIsNeeded )
 			{
-				var forceLeftJoin = comparisonWithNullableEntity && Walker.IsNullComparison;
-				DereferenceEntityJoin(classAlias, entityType, implicitJoin, parent, forceLeftJoin);
+				DereferenceEntityJoin(classAlias, entityType, implicitJoin, parent, comparisonWithNullableEntity);
 				if (comparisonWithNullableEntity)
 				{
 					_columns = FromElement.GetIdentityColumns();
@@ -465,9 +477,13 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				           ASTUtil.GetDebugstring( parent ));
 			}
 
-			// Create a new FROM node for the referenced class.
-			string associatedEntityName = propertyType.GetAssociatedEntityName();
-			string tableAlias = AliasGenerator.CreateName( associatedEntityName );
+			if (FromElement is JoinSubqueryFromElement joinSubquery &&
+			    joinSubquery.PropertyMapping.ContainsEntityAlias(PropertyPath, propertyType))
+			{
+				// No need to create a join 
+				SetPropertyNameAndPath(parent);
+				return;
+			}
 
 			string[] joinColumns = GetColumns();
 			string joinPath = Path;
@@ -516,10 +532,12 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 
 			if ( ! useFoundFromElement )
 			{
-				// If this is an implied join in a from element, then use the impled join type which is part of the
-				// tree parser's state (set by the gramamar actions).
+				// Create a new FROM node for the referenced class.
+				var associatedEntityName = propertyType.GetAssociatedEntityName();
+				var tableAlias = AliasGenerator.CreateName(associatedEntityName);
+
 				JoinSequence joinSequence = SessionFactoryHelper
-					.CreateJoinSequence(!forceLeftJoin && impliedJoin, propertyType, tableAlias, _joinType, joinColumns);
+					.CreateJoinSequence(false, propertyType, tableAlias, _joinType, joinColumns);
 
 				var factory = new FromElementFactory(
 						currentFromClause,
@@ -544,6 +562,8 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				{
 					elem.JoinSequence.SetJoinType(_joinType);
 				}
+
+				elem.ReusedJoin = true;
 				currentFromClause.AddDuplicateAlias(classAlias, elem);
 			}
 
@@ -567,7 +587,7 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 			}
 
 			// otherwise (subquery case) don't reuse the fromElement if we are processing the from-clause of the subquery
-			return Walker.CurrentClauseType != HqlSqlWalker.FROM;
+			return Walker.CurrentClauseType != HqlSqlWalker.FROM && Walker.CurrentClauseType != HqlSqlWalker.JOIN;
 		}
 
 		private void SetImpliedJoin(FromElement elem)
@@ -756,6 +776,25 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 				CheckSubclassOrSuperclassPropertyReference(lhs, lhs.NextSibling.Text);
 				lhs = (FromReferenceNode)lhs.GetChild(0);
 			}
+		}
+
+		public IType ExpectedType
+		{
+			get => DataType;
+			set
+			{
+				if (Type != HqlSqlWalker.JAVA_CONSTANT)
+					return;
+
+				DataType = value;
+			}
+		}
+
+		public override SqlString RenderText(ISessionFactoryImplementor sessionFactory)
+		{
+			return Type == HqlSqlWalker.JAVA_CONSTANT
+				? JavaConstantNode.ResolveToLiteralString(DataType, _constantValue, sessionFactory.Dialect)
+				: base.RenderText(sessionFactory);
 		}
 	}
 }

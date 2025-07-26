@@ -263,8 +263,8 @@ namespace NHibernate.Test.SqlCommandTest
 			Parameter p2 = Parameter.Placeholder;
 
 			SqlString sql = new SqlString(new object[] { p1, p2 });
-			sql = sql.Trim();
 
+			Assert.That(ReferenceEquals(sql, sql.Trim()), Is.True);
 			Assert.AreEqual("??", sql.ToString());
 		}
 
@@ -434,7 +434,8 @@ namespace NHibernate.Test.SqlCommandTest
 			Assert.IsNull(parameters2[0].ParameterPosition);
 
 			// more simple version of the test
-			Assert.That(Parameter.Placeholder, Is.Not.SameAs(Parameter.Placeholder));
+			var placeholder = Parameter.Placeholder;
+			Assert.That(placeholder, Is.Not.SameAs(Parameter.Placeholder));
 		}
 
 		[Test]

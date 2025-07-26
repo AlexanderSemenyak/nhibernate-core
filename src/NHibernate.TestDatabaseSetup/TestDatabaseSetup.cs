@@ -23,6 +23,7 @@ namespace NHibernate.TestDatabaseSetup
 			{
 				{"NHibernate.Driver.SqlClientDriver", SetupSqlServer},
 				{"NHibernate.Driver.Sql2008ClientDriver", SetupSqlServer},
+				{"NHibernate.Driver.MicrosoftDataSqlClientDriver", SetupSqlServer},
 				{"NHibernate.Driver.FirebirdClientDriver", SetupFirebird},
 				{"NHibernate.Driver.NpgsqlDriver", SetupNpgsql},
 				{"NHibernate.Driver.OracleDataClientDriver", SetupOracle},
@@ -31,6 +32,9 @@ namespace NHibernate.TestDatabaseSetup
 				{"NHibernate.Driver.OracleManagedDataClientDriver", SetupOracle},
 				{"NHibernate.Driver.OdbcDriver", SetupSqlServerOdbc},
 				{"NHibernate.Driver.SQLite20Driver", SetupSQLite},
+				{"NHibernate.Driver.DB2Driver", SetupDB2},
+				{"NHibernate.Driver.DB2CoreDriver", SetupDB2},
+				{"NHibernate.Driver.DB2NetDriver", SetupDB2},
 #if NETFX
 				{"NHibernate.Driver.SqlServerCeDriver", SetupSqlServerCe},
 				{"NHibernate.Driver.SapSQLAnywhere17Driver", SetupSqlAnywhere}
@@ -182,11 +186,7 @@ namespace NHibernate.TestDatabaseSetup
 
 				using (var cmd = conn.CreateCommand())
 				{
-					cmd.CommandText =
-						@"CREATE OR REPLACE FUNCTION uuid_generate_v4()
-						RETURNS uuid
-						AS '$libdir/uuid-ossp', 'uuid_generate_v4'
-						VOLATILE STRICT LANGUAGE C;";
+					cmd.CommandText = "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";";
 
 					cmd.ExecuteNonQuery();
 				}
@@ -208,6 +208,10 @@ namespace NHibernate.TestDatabaseSetup
 			{
 				Console.WriteLine(e);
 			}
+		}
+
+		private static void SetupDB2(Cfg.Configuration cfg)
+		{
 		}
 
 		private static void SetupOracle(Cfg.Configuration cfg)

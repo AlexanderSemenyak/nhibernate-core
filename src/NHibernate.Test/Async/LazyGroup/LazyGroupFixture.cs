@@ -22,13 +22,14 @@ namespace NHibernate.Test.LazyGroup
 	[TestFixture]
 	public class LazyGroupFixtureAsync : TestCase
 	{
+		protected override string CacheConcurrencyStrategy => "nonstrict-read-write";
+
 		protected override string MappingsAssembly => "NHibernate.Test";
 
 		protected override string[] Mappings => new[] { "LazyGroup.Mappings.hbm.xml" };
 
 		protected override void Configure(Configuration configuration)
 		{
-			base.Configure(configuration);
 			configuration.Properties[Environment.CacheProvider] = typeof(HashtableCacheProvider).AssemblyQualifiedName;
 			configuration.Properties[Environment.UseSecondLevelCache] = "true";
 			configuration.Properties[Environment.GenerateStatistics] = "true";

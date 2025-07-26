@@ -4,6 +4,7 @@ using System.Linq;
 using NHibernate.Persister.Collection;
 using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
+using NHibernate.Type;
 
 namespace NHibernate.Engine
 {
@@ -16,9 +17,9 @@ namespace NHibernate.Engine
 	// ) ON person0_.Id = individual1_.PersonID AND individual1_1_.Deleted = @p0
 	internal class TableGroupJoinHelper
 	{
-		internal static bool ProcessAsTableGroupJoin(IReadOnlyList<IJoin> tableGroupJoinables, SqlString[] withClauseFragments, bool includeAllSubclassJoins, JoinFragment joinFragment, Func<string, bool> isSubclassIncluded, ISessionFactoryImplementor sessionFactoryImplementor)
+		internal static bool ProcessAsTableGroupJoin(IReadOnlyList<IJoin> tableGroupJoinables, SqlString[] withClauseFragments, bool includeAllSubclassJoins, JoinFragment joinFragment, Func<string, bool> isSubclassIncluded)
 		{
-			if (!NeedsTableGroupJoin(tableGroupJoinables, withClauseFragments, includeAllSubclassJoins))
+			if (!NeedsTableGroupJoin(tableGroupJoinables, withClauseFragments, includeAllSubclassJoins, isSubclassIncluded))
 				return false;
 
 			var first = tableGroupJoinables[0];
@@ -58,7 +59,7 @@ namespace NHibernate.Engine
 		}
 
 		// detect cases when withClause is used on multiple tables or when join keys depend on subclass columns
-		private static bool NeedsTableGroupJoin(IReadOnlyList<IJoin> joins, SqlString[] withClauseFragments, bool includeSubclasses)
+		private static bool NeedsTableGroupJoin(IReadOnlyList<IJoin> joins, SqlString[] withClauseFragments, bool includeSubclasses, Func<string, bool> isSubclassIncluded)
 		{
 			bool hasWithClause = withClauseFragments.Any(x => SqlStringHelper.IsNotEmpty(x));
 
@@ -68,15 +69,21 @@ namespace NHibernate.Engine
 
 			foreach (var join in joins)
 			{
-				var entityPersister = GetEntityPersister(join.Joinable);
-				if (entityPersister?.HasSubclassJoins(includeSubclasses) != true)
+				var entityPersister = GetEntityPersister(join.Joinable, out var manyToManyType);
+				if (manyToManyType?.IsNullable == true)
+					return true;
+
+				if (entityPersister?.HasSubclassJoins(includeSubclasses && isSubclassIncluded(join.Alias)) != true)
 					continue;
 
 				if (hasWithClause)
 					return true;
 
-				if (entityPersister.ColumnsDependOnSubclassJoins(join.RHSColumns))
+				if (manyToManyType == null // many-to-many keys are stored in separate table
+				    && entityPersister.ColumnsDependOnSubclassJoins(join.RHSColumns))
+				{
 					return true;
+				}
 			}
 
 			return false;
@@ -91,14 +98,16 @@ namespace NHibernate.Engine
 			var isAssociationJoin = lhsColumns.Length > 0;
 			if (isAssociationJoin)
 			{
-				var entityPersister = GetEntityPersister(first.Joinable);
+				var entityPersister = GetEntityPersister(first.Joinable, out var manyToManyType);
 				string rhsAlias = first.Alias;
 				string[] rhsColumns = first.RHSColumns;
 				for (int j = 0; j < lhsColumns.Length; j++)
 				{
 					fromFragment.Add(lhsColumns[j])
 								.Add("=")
-								.Add(entityPersister?.GenerateTableAliasForColumn(rhsAlias, rhsColumns[j]) ?? rhsAlias)
+								.Add((entityPersister == null || manyToManyType != null) // many-to-many keys are stored in separate table
+									     ? rhsAlias
+									     : entityPersister.GenerateTableAliasForColumn(rhsAlias, rhsColumns[j]))
 								.Add(".")
 								.Add(rhsColumns[j]);
 					if (j != lhsColumns.Length - 1)
@@ -111,13 +120,18 @@ namespace NHibernate.Engine
 			return fromFragment.ToSqlString();
 		}
 
-		private static AbstractEntityPersister GetEntityPersister(IJoinable joinable)
+		private static AbstractEntityPersister GetEntityPersister(IJoinable joinable, out EntityType manyToManyType)
 		{
+			manyToManyType = null;
 			if (!joinable.IsCollection)
 				return joinable as AbstractEntityPersister;
 
 			var collection = (IQueryableCollection) joinable;
-			return collection.ElementType.IsEntityType ? collection.ElementPersister as AbstractEntityPersister : null;
+			if (!collection.ElementType.IsEntityType)
+				return null;
+			if (collection.IsManyToMany)
+				manyToManyType = (EntityType) collection.ElementType;
+			return collection.ElementPersister as AbstractEntityPersister;
 		}
 
 		private static void AppendWithClause(SqlStringBuilder fromFragment, bool hasConditions, SqlString[] withClauseFragments)

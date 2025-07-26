@@ -31,6 +31,7 @@ namespace NHibernate.Loader
 		protected virtual void InitAll(SqlString whereString, SqlString orderByString, LockMode lockMode)
 		{
 			AddAssociations();
+			ProcessJoins();
 			IList<OuterJoinableAssociation> allAssociations = new List<OuterJoinableAssociation>(associations);
 			var rootAssociation = CreateRootAssociation();
 			allAssociations.Add(rootAssociation);
@@ -120,7 +121,7 @@ namespace NHibernate.Loader
 
 				Suffixes = BasicLoader.GenerateSuffixes(joins + 1);
 				var suffix = Suffixes[joins];
-				selectClause = new SqlString(rootAssociation.GetSelectFragment(suffix, null, null) + SelectString(associations));
+				selectClause = new SqlString(rootAssociation.GetSelectFragment(suffix, null) + SelectString(associations));
 			}
 
 			JoinFragment ojf = MergeOuterJoins(associations);

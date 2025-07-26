@@ -1,11 +1,12 @@
-﻿﻿using System;
+﻿using System;
 using System.Collections.Generic;
 using NHibernate.Engine;
-using NHibernate.Loader;
 using NHibernate.Loader.Criteria;
 using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
 using NHibernate.Type;
+using NHibernate.Util;
+
 using IQueryable = NHibernate.Persister.Entity.IQueryable;
 
 namespace NHibernate.Criterion
@@ -128,20 +129,21 @@ namespace NHibernate.Criterion
 		{
 			SetFields(criteriaQuery);
 
-			string identifierSelectFragment = Persister.IdentifierSelectFragment(TableAlias, ColumnAliasSuffix);
+			var identifierSelectFragment = Persister.GetIdentifierSelectFragment(TableAlias, ColumnAliasSuffix)
+				.ToSqlStringFragment(false);
 			return new SqlString(
 				Lazy
 					? identifierSelectFragment
 					: string.Concat(
 						identifierSelectFragment,
-						GetPropertySelectFragment()));
+						GetPropertySelectFragment().ToSqlStringFragment()));
 		}
 
-		private string GetPropertySelectFragment()
+		private SelectFragment GetPropertySelectFragment()
 		{
 			return FetchLazyProperties
-				? Persister.PropertySelectFragment(TableAlias, ColumnAliasSuffix, FetchLazyProperties)
-				: Persister.PropertySelectFragment(TableAlias, ColumnAliasSuffix, FetchLazyPropertyGroups);
+				? Persister.GetPropertiesSelectFragment(TableAlias, ColumnAliasSuffix, FetchLazyProperties)
+				: Persister.GetPropertiesSelectFragment(TableAlias, ColumnAliasSuffix, FetchLazyPropertyGroups);
 		}
 
 		SqlString IProjection.ToGroupSqlString(ICriteria criteria, ICriteriaQuery criteriaQuery)
@@ -203,7 +205,7 @@ namespace NHibernate.Criterion
 				subcriteria,
 				Persister.IdentifierPropertyName ?? string.Empty);
 
-			ColumnAliasSuffix = BasicLoader.GenerateSuffix(criteriaQuery.GetIndexForAlias());
+			ColumnAliasSuffix = StringHelper.GenerateSuffix(criteriaQuery.GetIndexForAlias());
 
 			_identifierColumnAliases = Persister.GetIdentifierAliases(ColumnAliasSuffix);
 

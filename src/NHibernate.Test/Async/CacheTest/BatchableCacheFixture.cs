@@ -15,6 +15,7 @@ using System.Reflection;
 using NHibernate.Cache;
 using NHibernate.Cfg;
 using NHibernate.Linq;
+using NHibernate.Loader;
 using NHibernate.Multi;
 using NHibernate.Test.CacheTest.Caches;
 using NUnit.Framework;
@@ -24,9 +25,17 @@ namespace NHibernate.Test.CacheTest
 {
 	using System.Threading.Tasks;
 	using System.Threading;
-	[TestFixture]
+	[TestFixture(BatchFetchStyle.Dynamic)]
+	[TestFixture(BatchFetchStyle.Legacy)]
 	public class BatchableCacheFixtureAsync : TestCase
 	{
+		private readonly BatchFetchStyle _fetchStyle;
+
+		public BatchableCacheFixtureAsync(BatchFetchStyle fetchStyle)
+		{
+			_fetchStyle = fetchStyle;
+		}
+
 		protected override string[] Mappings => new[]
 		{
 			"CacheTest.ReadOnly.hbm.xml",
@@ -35,14 +44,13 @@ namespace NHibernate.Test.CacheTest
 
 		protected override string MappingsAssembly => "NHibernate.Test";
 
-		protected override string CacheConcurrencyStrategy => null;
-
 		protected override void Configure(Configuration configuration)
 		{
 			configuration.SetProperty(Environment.UseSecondLevelCache, "true");
 			configuration.SetProperty(Environment.UseQueryCache, "true");
 			configuration.SetProperty(Environment.GenerateStatistics, "true");
 			configuration.SetProperty(Environment.CacheProvider, typeof(BatchableCacheProvider).AssemblyQualifiedName);
+			configuration.SetProperty(Environment.BatchFetchStyle, _fetchStyle.ToString());
 		}
 
 		protected override void OnSetUp()
@@ -1557,8 +1565,79 @@ namespace NHibernate.Test.CacheTest
 			Assert.That(Sfi.Statistics.QueryCacheHitCount, Is.EqualTo(future ? 2 : 1), "Unexpected cache hit count");
 		}
 
+		[Test]
+		public async Task CollectionLazyInitializationFromCacheIsBatchedAsync()
+		{
+			using (var s = OpenSession())
+			{
+				var readOnly = await (s.GetAsync<ReadOnly>(await (s.Query<ReadOnly>().Select(x => x.Id).FirstAsync())));
+				Assert.That(readOnly.Items.Count, Is.EqualTo(6));
+			}
+
+			var itemPersister = Sfi.GetEntityPersister(typeof(ReadOnlyItem).FullName);
+			var itemCache = (BatchableCache) itemPersister.Cache.Cache;
+			itemCache.ClearStatistics();
+
+			using (var s = OpenSession())
+			{
+				var readOnly = await (s.GetAsync<ReadOnly>(await (s.Query<ReadOnly>().Select(x => x.Id).FirstAsync())));
+				Assert.That(readOnly.Items.Count, Is.EqualTo(6));
+			}
+
+			// 6 items with batch-size = 4 so 2 GetMany calls are expected 1st call: 4 items + 2nd call: 2 items
+			Assert.That(itemCache.GetMultipleCalls.Count, Is.EqualTo(2));
+		}
+
+		[Test]
+		public async Task CollectionLazyInitializationFromCacheIsBatched_FillCacheByQueryCacheAsync()
+		{
+			var itemPersister = Sfi.GetEntityPersister(typeof(ReadOnlyItem).FullName);
+			var itemCache = (BatchableCache) itemPersister.Cache.Cache;
+			itemCache.ClearStatistics();
+			int id;
+			using (var s = OpenSession())
+			{
+				id = await (s.Query<ReadOnly>().Select(x => x.Id).FirstAsync());
+				var readOnly = (await (s.Query<ReadOnly>().Fetch(x => x.Items)
+				                .Where(x => x.Id == id)
+				                .WithOptions(x => x.SetCacheable(true))
+				                .ToListAsync()))
+				                .First();
+				Assert.That(itemCache.PutMultipleCalls.Count, Is.EqualTo(1));
+				Assert.That(itemCache.GetMultipleCalls.Count, Is.EqualTo(0));
+				Assert.That(NHibernateUtil.IsInitialized(readOnly.Items));
+				Assert.That(readOnly.Items.Count, Is.EqualTo(6));
+			}
+
+			itemCache.ClearStatistics();
+			using (var s = OpenSession())
+			{
+				var readOnly = (await (s.Query<ReadOnly>().Fetch(x => x.Items)
+				                .Where(x => x.Id == id)
+				                .WithOptions(x => x.SetCacheable(true))
+				                .ToListAsync()))
+				                .First();
+				Assert.That(itemCache.PutMultipleCalls.Count, Is.EqualTo(0));
+				Assert.That(itemCache.GetMultipleCalls.Count, Is.EqualTo(1));
+				Assert.That(NHibernateUtil.IsInitialized(readOnly.Items));
+				Assert.That(readOnly.Items.Count, Is.EqualTo(6));
+			}
+
+			itemCache.ClearStatistics();
+
+
+			using (var s = OpenSession())
+			{
+				var readOnly = await (s.GetAsync<ReadOnly>(id));
+				Assert.That(readOnly.Items.Count, Is.EqualTo(6));
+			}
+
+			// 6 items with batch-size = 4 so 2 GetMany calls are expected 1st call: 4 items + 2nd call: 2 items
+			Assert.That(itemCache.GetMultipleCalls.Count, Is.EqualTo(2));
+		}
+
 		private async Task AssertMultipleCacheCallsAsync<TEntity>(IEnumerable<int> loadIds,  IReadOnlyList<int> getIds, int idIndex, 
-														int[][] fetchedIdIndexes, int[] putIdIndexes, Func<int, bool> cacheBeforeLoadFn = null, CancellationToken cancellationToken = default(CancellationToken))
+		                                               int[][] fetchedIdIndexes, int[] putIdIndexes, Func<int, bool> cacheBeforeLoadFn = null, CancellationToken cancellationToken = default(CancellationToken))
 			where TEntity : CacheEntity
 		{
 			var persister = Sfi.GetEntityPersister(typeof(TEntity).FullName);

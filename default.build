@@ -6,7 +6,7 @@
 >
 
 	<property name="root.dir" value="." />
-	<property name="bin.target.dir" value="net461" />
+	<property name="bin.target.dir" value="net48" />
 	<property name="test.target.dir" value="net48" />
 
 	<include buildfile="${root.dir}/build-common/common.xml" />
@@ -45,7 +45,7 @@
 			<arg value="/t:Restore" />
 			<arg value="/t:Rebuild" />
 			<arg value="/v:q" />
-			<arg value="/m" />
+			<arg value="/m:1" />
 		</exec> 
 	</target>
 
@@ -135,6 +135,26 @@
 		<xmlpoke file="${app.config}"
 			xpath="//*/hbm:property[@name='query.default_cast_length']"
 			value="${nhibernate.query.default_cast_length}">
+			<namespaces>
+				<namespace prefix="hbm" uri="urn:nhibernate-configuration-2.2" />
+			</namespaces>
+		</xmlpoke>
+		
+		<!-- Make sure the property exists - it's only set for some scenarios. -->
+		<property name="nhibernate.transaction.ignore_session_synchronization_failures" value="" unless="${property::exists('nhibernate.transaction.ignore_session_synchronization_failures')}"/>
+		<xmlpoke file="${app.config}"
+			xpath="//*/hbm:property[@name='transaction.ignore_session_synchronization_failures']"
+			value="${nhibernate.transaction.ignore_session_synchronization_failures}">
+			<namespaces>
+				<namespace prefix="hbm" uri="urn:nhibernate-configuration-2.2" />
+			</namespaces>
+		</xmlpoke>
+		
+		<!-- Make sure the property exists - it's only set for some scenarios. -->
+		<property name="nhibernate.transaction.system_completion_lock_timeout" value="" unless="${property::exists('nhibernate.transaction.system_completion_lock_timeout')}"/>
+		<xmlpoke file="${app.config}"
+			xpath="//*/hbm:property[@name='transaction.system_completion_lock_timeout']"
+			value="${nhibernate.transaction.system_completion_lock_timeout}">
 			<namespaces>
 				<namespace prefix="hbm" uri="urn:nhibernate-configuration-2.2" />
 			</namespaces>

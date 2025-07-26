@@ -18,8 +18,12 @@ namespace NHibernate.Linq.Functions
 				ReflectHelper.FastGetMethod(Math.Truncate, default(double)),
 				ReflectHelper.FastGetMethod(decimal.Truncate, default(decimal)),
 
-#if NETCOREAPP2_0_OR_GREATER
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
 				ReflectHelper.FastGetMethod(MathF.Truncate, default(float)),
+#endif
+#if NET8_0_OR_GREATER
+				ReflectHelper.FastGetMethod(float.Truncate, default(float)),
+				ReflectHelper.FastGetMethod(double.Truncate, default(double)),
 #endif
 			};
 		}

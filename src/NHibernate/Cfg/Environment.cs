@@ -110,8 +110,20 @@ namespace NHibernate.Cfg
 		public const string CurrentSessionContextClass = "current_session_context_class";
 		public const string UseSqlComments = "use_sql_comments";
 
+		/// <summary>
+		/// Enable or disable the ability to detect loops in query fetches.
+		/// The default is to detect and elimate potential fetch loops.
+		/// </summary>
+		public const string DetectFetchLoops = "detect_fetch_loops";
+
 		/// <summary> Enable formatting of SQL logged to the console</summary>
 		public const string FormatSql = "format_sql";
+
+		/// <summary>
+		/// Indicates if the database needs to have backslash escaped in string literals.
+		/// </summary>
+		/// <remarks>The default value is dialect dependent.</remarks>
+		public const string EscapeBackslashInStrings = "escape_backslash_in_strings";
 
 		// Since v5.0.1
 		[Obsolete("This setting has no usages and will be removed in a future version")]
@@ -136,11 +148,28 @@ namespace NHibernate.Cfg
 		/// after scope disposal. This occurs when the transaction is distributed.
 		/// This notably concerns <see cref="ISessionImplementor.AfterTransactionCompletion(bool, ITransaction)"/>.
 		/// NHibernate protects the session from being concurrently used by the code following the scope disposal
-		/// with a lock. To prevent any application freeze, this lock has a default timeout of five seconds. If the
-		/// application appears to require longer (!) running transaction completion events, this setting allows to
+		/// with a lock. To prevent any application freeze, this lock has a default timeout of one second. If the
+		/// application appears to require longer running transaction completion events, this setting allows to
 		/// raise this timeout. <c>-1</c> disables the timeout.</para>
 		/// </summary>
 		public const string SystemTransactionCompletionLockTimeout = "transaction.system_completion_lock_timeout";
+		/// <summary>
+		/// Whether session synchronisation failures occuring during finalizations of system transaction should be
+		/// ignored or not. <see langword="false" /> by default.
+		/// </summary>
+		/// <remarks>
+		/// <para>When a system transaction terminates abnormaly, especially through timeouts, it may have its
+		/// completion events running on concurrent threads while the session is still performing some processing.
+		/// To prevent threading concurrency failures, NHibernate then wait for the session to end its processing,
+		/// up to <see cref="SystemTransactionCompletionLockTimeout" />. If the session processing is still ongoing
+		/// afterwards, it will by default log an error, perform transaction finalization processing concurrently,
+		/// then throw a synchronization error. This setting allows to disable that later throw.</para>
+		/// <para>Disabling the throw can be useful if the used data provider has its own locking mechanism applied
+		/// during transaction completion, preventing the session to end its processing. It may then be safe to
+		/// ignore this synchronization failure. In case of threading concurrency failure, you may then need to
+		/// raise <see cref="SystemTransactionCompletionLockTimeout" />.</para>
+		/// </remarks>
+		public const string IgnoreSessionSynchronizationFailuresOnSystemTransaction = "transaction.ignore_session_synchronization_failures";
 		/// <summary>
 		/// When a system transaction is being prepared, is using connection during this process enabled?
 		/// Default is <see langword="true"/>, for supporting <see cref="FlushMode.Commit"/> with transaction factories
@@ -233,6 +262,11 @@ namespace NHibernate.Cfg
 		public const string ProxyFactoryFactoryClass = "proxyfactory.factory_class";
 
 		public const string DefaultBatchFetchSize = "default_batch_fetch_size";
+
+		/// <summary>
+		/// <see cref="NHibernate.Loader.BatchFetchStyle"/> to use.
+		/// </summary> 
+		public const string BatchFetchStyle = "batch_fetch_style";
 
 		public const string CollectionTypeFactoryClass = "collectiontype.factory_class";
 

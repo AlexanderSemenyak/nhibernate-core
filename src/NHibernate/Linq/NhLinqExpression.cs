@@ -11,7 +11,7 @@ using NHibernate.Type;
 
 namespace NHibernate.Linq
 {
-	public class NhLinqExpression : IQueryExpression, ICacheableQueryExpression
+	public class NhLinqExpression : ILinqQueryExpression, ICacheableQueryExpression
 	{
 		public string Key { get; protected set; }
 
@@ -34,7 +34,7 @@ namespace NHibernate.Linq
 
 		protected virtual QueryMode QueryMode { get; }
 
-		internal IDictionary<string, NamedParameter> NamedParameters { get; }
+		public IDictionary<string, NamedParameter> NamedParameters { get; }
 
 		private readonly Expression _expression;
 		private readonly IDictionary<ConstantExpression, NamedParameter> _constantToParameterMap;
@@ -113,12 +113,18 @@ namespace NHibernate.Linq
 			return DuplicateTree(ExpressionToHqlTranslationResults.Statement.AstNode);
 		}
 
-		internal void CopyExpressionTranslation(NhLinqExpression other)
+		public void CopyExpressionTranslation(NhLinqExpressionCache cache)
 		{
-			ExpressionToHqlTranslationResults = other.ExpressionToHqlTranslationResults;
-			ParameterDescriptors = other.ParameterDescriptors;
+			ExpressionToHqlTranslationResults = cache.ExpressionToHqlTranslationResults;
+			ParameterDescriptors = cache.ParameterDescriptors;
 			// Type could have been overridden by translation.
-			Type = other.Type;
+			Type = cache.Type;
+		}
+
+		public IDictionary<string, Tuple<IType, bool>> GetNamedParameterTypes()
+		{
+			return _constantToParameterMap.Values.Distinct()
+				.ToDictionary(p => p.Name, p => System.Tuple.Create(p.Type, p.IsGuessedType));
 		}
 
 		private static IASTNode DuplicateTree(IASTNode ast)

@@ -21,11 +21,10 @@ namespace NHibernate.Test.Linq
 	[TestFixture]
 	public class QueryCacheableTestsAsync : LinqTestCase
 	{
-		protected override void Configure(Configuration cfg)
+		protected override void Configure(Configuration configuration)
 		{
-			cfg.SetProperty(Environment.UseQueryCache, "true");
-			cfg.SetProperty(Environment.GenerateStatistics, "true");
-			base.Configure(cfg);
+			configuration.SetProperty(Environment.UseQueryCache, "true");
+			configuration.SetProperty(Environment.GenerateStatistics, "true");
 		}
 
 		[Test]
@@ -454,9 +453,6 @@ namespace NHibernate.Test.Linq
 		[Test]
 		public async Task CacheHqlQueryWithFetchAndTransformerThatChangeTupleAsync()
 		{
-			if (!TestDialect.SupportsDuplicatedColumnAliases)
-				Assert.Ignore("Ignored due to GH-2092");
-
 			Sfi.Statistics.Clear();
 			await (Sfi.EvictQueriesAsync());
 

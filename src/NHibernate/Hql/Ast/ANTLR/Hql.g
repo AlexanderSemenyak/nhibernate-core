@@ -255,6 +255,7 @@ fromClause
 
 fromJoin
 	: ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ (FETCH)? path (asAlias)? (propertyFetch)? (withClause)?
+	| ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ OPEN! selectStatement CLOSE! (asAlias)? (withClause)?
 	| ( ( ( LEFT | RIGHT ) (OUTER)? ) | FULL | INNER )? JOIN^ (FETCH)? ELEMENTS! OPEN! path CLOSE! (asAlias)? (propertyFetch)? (withClause)?
 	| CROSS JOIN^ { WeakKeywords(); } path (asAlias)? (propertyFetch)?
 	;
@@ -599,7 +600,7 @@ vectorExpr
 // NOTE: handleDotIdent() is called immediately after the first IDENT is recognized because
 // the method looks a head to find keywords after DOT and turns them into identifiers.
 identPrimary
-	: identifier { HandleDotIdent(); }
+	: identifier {{ HandleDotIdent(); }}
 			( options {greedy=true;} : DOT^ ( identifier | o=OBJECT { $o.Type = IDENT; } ) )*
 			( ( op=OPEN^ { $op.Type = METHOD_CALL;} exprList CLOSE! )
 			)?
@@ -627,12 +628,11 @@ aggregateArgument
 	;
 
 aggregateDistinctAll
-	: ( distinctAll aggregateArgument ) => (distinctAll aggregateArgument)
-	| aggregateArgument
+	: ( distinctAll? aggregateArgument )
 	;
 
 distinctAll
-	: ( DISTINCT | ALL ) 
+	: {input.LA(1) == DISTINCT || input.LA(1) == ALL}? ( DISTINCT | ALL ) 
 	;
 
 //## collection: ( OPEN query CLOSE ) | ( 'elements'|'indices' OPEN path CLOSE );
@@ -695,10 +695,9 @@ constant
 
 path
 @init {
-// TODO - need to clean up DotIdent - suspect that DotIdent2 supersedes the other one, but need to do the analysis
-//HandleDotIdent2();
+HandleDotIdents();
 }
-	: identifier ( DOT^ { WeakKeywords(); } identifier )*
+	: identifier ( DOT^ identifier )*
 	;
 
 // Wraps the IDENT token from the lexer, in order to provide

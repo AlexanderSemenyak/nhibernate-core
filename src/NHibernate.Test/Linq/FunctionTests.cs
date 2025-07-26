@@ -192,7 +192,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = query.ToList();
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			ObjectDumper.Write(query);
 		}
 
@@ -208,7 +208,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = query.ToList();
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			ObjectDumper.Write(query);
 		}
 
@@ -224,7 +224,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = query.ToList();
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			ObjectDumper.Write(query);
 		}
 
@@ -240,7 +240,7 @@ namespace NHibernate.Test.Linq
 						select lowerName.IndexOf("a", 1);
 			var result = query.ToList();
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			ObjectDumper.Write(query);
 		}
 
@@ -486,6 +486,33 @@ namespace NHibernate.Test.Linq
 		{
 			var query = from item in db.OrderLines
 						where item.Discount.Equals(-1)
+						select item;
+
+			ObjectDumper.Write(query);
+		}
+
+		[Test]
+		public void WhereEnumEqual()
+		{
+			var query = from item in db.PatientRecords
+						where item.Gender.Equals(Gender.Female)
+						select item;
+
+			ObjectDumper.Write(query);
+
+			query = from item in db.PatientRecords
+					where item.Gender.Equals(item.Gender)
+					select item;
+
+			ObjectDumper.Write(query);
+		}
+
+
+		[Test]
+		public void WhereObjectEqual()
+		{
+			var query = from item in db.PatientRecords
+						where ((object) item.Gender).Equals(Gender.Female)
 						select item;
 
 			ObjectDumper.Write(query);

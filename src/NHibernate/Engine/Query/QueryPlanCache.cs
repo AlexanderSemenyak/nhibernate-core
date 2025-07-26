@@ -5,6 +5,7 @@ using System.Runtime.Serialization;
 using NHibernate.Engine.Query.Sql;
 using NHibernate.Hql;
 using NHibernate.Linq;
+using NHibernate.Type;
 using NHibernate.Util;
 
 namespace NHibernate.Engine.Query
@@ -41,6 +42,11 @@ namespace NHibernate.Engine.Query
 
 		public ParameterMetadata GetSQLParameterMetadata(string query)
 		{
+			return GetSQLParameterMetadata(query, CollectionHelper.EmptyDictionary<string, string>());
+		}
+
+		public ParameterMetadata GetSQLParameterMetadata(string query, IDictionary<string, string> parameterTypes)
+		{
 			var metadata = (ParameterMetadata)sqlParamMetadataCache[query];
 			if (metadata == null)
 			{
@@ -49,7 +55,7 @@ namespace NHibernate.Engine.Query
 				// retrieval for a native-sql query depends on all of the return
 				// types having been set, which might not be the case up-front when
 				// param metadata would be most useful
-				metadata = BuildNativeSQLParameterMetadata(query);
+				metadata = BuildNativeSQLParameterMetadata(query, parameterTypes);
 				sqlParamMetadataCache.Put(query, metadata);
 			}
 			return metadata;
@@ -66,10 +72,11 @@ namespace NHibernate.Engine.Query
 				{
 					log.Debug("unable to locate HQL query plan in cache; generating ({0})", queryExpression.Key);
 				}
+
 				plan = new QueryExpressionPlan(queryExpression, shallow, enabledFilters, factory);
 				// 6.0 TODO: add "CanCachePlan { get; }" to IQueryExpression interface
 				if (!(queryExpression is ICacheableQueryExpression linqExpression) || linqExpression.CanCachePlan)
-					planCache.Put(key, plan);
+					planCache.Put(key, PreparePlanToCache(plan));
 				else
 					log.Debug("Query plan not cacheable");
 			}
@@ -85,24 +92,32 @@ namespace NHibernate.Engine.Query
 			return plan;
 		}
 
+		private QueryExpressionPlan PreparePlanToCache(QueryExpressionPlan plan)
+		{
+			if (plan.QueryExpression is ILinqQueryExpression planExpression)
+			{
+				return plan.Copy(new NhLinqExpressionCache(planExpression));
+			}
+
+			return plan;
+		}
+
 		private static QueryExpressionPlan CopyIfRequired(QueryExpressionPlan plan, IQueryExpression queryExpression)
 		{
-			var planExpression = plan.QueryExpression as NhLinqExpression;
-			var expression = queryExpression as NhLinqExpression;
-			if (planExpression != null && expression != null)
+			if (plan.QueryExpression is NhLinqExpressionCache cache && 
+			    queryExpression is ILinqQueryExpression linqExpression)
 			{
 				//NH-3413
 				//Here we have to use original expression.
 				//In most cases NH do not translate expression in second time, but 
 				// for cases when we have list parameters in query, like @p1.Contains(...),
 				// it does, and then it uses parameters from first try. 
-				//TODO: cache only required parts of QueryExpression
 
 				//NH-3436
 				// We have to return new instance plan with it's own query expression
-				// because other treads can override queryexpression of current plan during execution of query if we will use cached instance of plan 
-				expression.CopyExpressionTranslation(planExpression);
-				plan = plan.Copy(expression);
+				// because other treads can override query expression of current plan during execution of query if we will use cached instance of plan 
+				linqExpression.CopyExpressionTranslation(cache);
+				plan = plan.Copy(linqExpression);
 			}
 
 			return plan;
@@ -124,7 +139,7 @@ namespace NHibernate.Engine.Query
 				plan = new FilterQueryPlan(queryExpression, collectionRole, shallow, enabledFilters, factory);
 				// 6.0 TODO: add "CanCachePlan { get; }" to IQueryExpression interface
 				if (!(queryExpression is ICacheableQueryExpression linqExpression) || linqExpression.CanCachePlan)
-					planCache.Put(key, plan);
+					planCache.Put(key, PreparePlanToCache(plan));
 				else
 					log.Debug("Query plan not cacheable");
 			}
@@ -161,14 +176,14 @@ namespace NHibernate.Engine.Query
 			return plan;
 		}
 
-		private ParameterMetadata BuildNativeSQLParameterMetadata(string sqlString)
+		private ParameterMetadata BuildNativeSQLParameterMetadata(string sqlString,
+			IDictionary<string, string> parameterTypes)
 		{
 			ParamLocationRecognizer recognizer = ParamLocationRecognizer.ParseLocations(sqlString);
 
 			var ordinalDescriptors = new OrdinalParameterDescriptor[recognizer.OrdinalParameterLocationList.Count];
-			for (int i = 0; i < recognizer.OrdinalParameterLocationList.Count; i++)
+			for (int i = 0; i < ordinalDescriptors.Length; i++)
 			{
-				int position = recognizer.OrdinalParameterLocationList[i];
 				ordinalDescriptors[i] = new OrdinalParameterDescriptor(i, null);
 			}
 
@@ -178,8 +193,14 @@ namespace NHibernate.Engine.Query
 			{
 				string name = entry.Key;
 				ParamLocationRecognizer.NamedParameterDescription description = entry.Value;
+				IType expectedType = null;
+				if (parameterTypes.TryGetValue(name, out var type) && !string.IsNullOrEmpty(type))
+				{
+					expectedType = TypeFactory.HeuristicType(type);
+				}
+
 				namedParamDescriptorMap[name] =
-					new NamedParameterDescriptor(name, null, description.JpaStyle);				
+					new NamedParameterDescriptor(name, expectedType, description.JpaStyle);
 			}
 
 			return new ParameterMetadata(ordinalDescriptors, namedParamDescriptorMap);

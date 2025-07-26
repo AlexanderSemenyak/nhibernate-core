@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-#if NETCOREAPP2_0_OR_GREATER
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
 using System.Runtime.Serialization;
 using System.Threading;
 #endif
@@ -114,12 +114,16 @@ namespace NHibernate.Collection.Generic.SetHelpers
 
 		void ICollection.CopyTo(Array array, int index)
 		{
-			if (!(array is T[] typedArray))
+			if (array is T[] typedArray)
 			{
-				throw new ArgumentException($"Array must be of type {typeof(T[])}.", nameof(array));
+				CopyTo(typedArray, index);
+				return;
 			}
 
-			CopyTo(typedArray, index);
+			if (_hasNull)
+				array.SetValue(default(T), index);
+			ICollection keysCollection = _values.Keys;
+			keysCollection.CopyTo(array, index + (_hasNull ? 1 : 0));
 		}
 
 		public int Count => _values.Count + (_hasNull ? 1 : 0);
@@ -132,7 +136,7 @@ namespace NHibernate.Collection.Generic.SetHelpers
 	}
 #endif
 
-#if NETCOREAPP2_0_OR_GREATER
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
 	[Serializable]
 	internal class SetSnapShot<T> : HashSet<T>, ICollection
 	{
@@ -147,18 +151,34 @@ namespace NHibernate.Collection.Generic.SetHelpers
 		{
 		}
 
+		// Since v5.6
+		[Obsolete("This API supports obsolete formatter-based serialization and will be removed in a future version")]
 		protected SetSnapShot(SerializationInfo info, StreamingContext context) : base(info, context)
 		{
 		}
 
 		void ICollection.CopyTo(Array array, int index)
 		{
-			if (!(array is T[] typedArray))
+			if (array is T[] typedArray)
 			{
-				throw new ArgumentException($"Array must be of type {typeof(T[])}.", nameof(array));
+				CopyTo(typedArray, index);
+				return;
 			}
 
-			CopyTo(typedArray, index);
+			if (array == null)
+				throw new ArgumentNullException(nameof(array));
+
+			if (index < 0)
+				throw new ArgumentOutOfRangeException(nameof(index), index, "Array index cannot be negative");
+
+			if (index > array.Length || Count > array.Length - index)
+				throw new ArgumentException("Provided array is too small", nameof(array));
+
+			foreach (var value in this)
+			{
+				array.SetValue(value, index);
+				index++;
+			}
 		}
 
 		bool ICollection.IsSynchronized => false;

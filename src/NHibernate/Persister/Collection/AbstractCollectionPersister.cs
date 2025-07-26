@@ -872,14 +872,27 @@ namespace NHibernate.Persister.Collection
 			}
 		}
 
+		// Since v5.4
+		[Obsolete("Use GetSelectFragment method instead.")]
 		public string SelectFragment(string alias, string columnSuffix)
 		{
-			SelectFragment frag = GenerateSelectFragment(alias, columnSuffix);
+			return GetSelectFragment(alias, columnSuffix).ToSqlStringFragment(false);
+		}
+
+		/// <summary>
+		/// Gets the select fragment containing collection element, index and indentifier columns.
+		/// </summary>
+		/// <param name="alias">The table alias.</param>
+		/// <param name="columnSuffix">The column suffix.</param>
+		/// <returns>The select fragment containing collection element, index and indentifier columns.</returns>
+		public SelectFragment GetSelectFragment(string alias, string columnSuffix)
+		{
+			var frag = GenerateSelectFragment(alias, columnSuffix);
 			AppendElementColumns(frag, alias);
 			AppendIndexColumns(frag, alias);
 			AppendIdentifierColumns(frag, alias);
 
-			return frag.ToSqlStringFragment(false);
+			return frag;
 		}
 
 		private void AddWhereFragment(SqlSimpleSelectBuilder sql)
@@ -1490,10 +1503,16 @@ namespace NHibernate.Persister.Collection
 
 		public virtual string FilterFragment(string alias, IDictionary<string, IFilter> enabledFilters)
 		{
+			var filterFragment = FilterFragment(alias);
+			if (!filterHelper.IsAffectedBy(enabledFilters))
+				return filterFragment;
+
+			if (ElementType.IsEntityType && elementPersister is AbstractEntityPersister ep)
+				return ep.FilterFragment(filterHelper, alias, enabledFilters, filterFragment);
+
 			StringBuilder sessionFilterFragment = new StringBuilder();
 			filterHelper.Render(sessionFilterFragment, alias, enabledFilters);
-
-			return sessionFilterFragment.Append(FilterFragment(alias)).ToString();
+			return sessionFilterFragment.Append(filterFragment).ToString();
 		}
 
 		public string OneToManyFilterFragment(string alias)
@@ -1758,8 +1777,15 @@ namespace NHibernate.Persister.Collection
 			return SelectFragment(rhs, rhsAlias, lhsAlias, collectionSuffix, includeCollectionColumns, new EntityLoadInfo(entitySuffix) {IncludeLazyProps = true});
 		}
 
-		//6.0 TODO: Make abstract
+		// 6.0 TODO: Remove
+		[Obsolete("Please use overload without rhs and rhsAlias parameters")]
 		public virtual string SelectFragment(IJoinable rhs, string rhsAlias, string lhsAlias, string currentCollectionSuffix, bool includeCollectionColumns, EntityLoadInfo entityInfo)
+		{
+			return SelectFragment(lhsAlias, currentCollectionSuffix, includeCollectionColumns, entityInfo);
+		}
+
+		// 6.0 TODO: Make abstract
+		public virtual string SelectFragment(string lhsAlias, string collectionSuffix, bool includeCollectionColumns, EntityLoadInfo entityInfo)
 		{
 			throw new NotImplementedException("SelectFragment with fetching lazy properties option is not implemented by " + GetType().FullName);
 		}

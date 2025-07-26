@@ -215,6 +215,9 @@ namespace NHibernate.SqlCommand
 			_firstPartIndex = _parts.Count > 0 ? 0 : -1;
 			_lastPartIndex = _parts.Count - 1;
 			_length = sqlIndex;
+
+			_parts.TrimExcess();
+			_parameters.TrimExcess();
 		}
 
 		#endregion
@@ -502,6 +505,11 @@ namespace NHibernate.SqlCommand
 			return LastIndexOf(text, 0, _length, StringComparison.InvariantCultureIgnoreCase);
 		}
 
+		internal int LastIndexOf(string text, StringComparison comparison)
+		{
+			return LastIndexOf(text, 0, _length, comparison);
+		}
+
 		/// <summary>
 		/// Returns the index of the first occurrence of <paramref name="text" />, case-insensitive.
 		/// </summary>
@@ -697,6 +705,10 @@ namespace NHibernate.SqlCommand
 			if (_firstPartIndex < 0) return this;
 
 			GetTrimmedIndexes(out var sqlStartIndex, out var length);
+
+			if (_sqlStartIndex == sqlStartIndex && _length == length)
+				return this;
+
 			return length > 0
 				? new SqlString(this, sqlStartIndex, length)
 				: Empty;
@@ -1088,6 +1100,15 @@ namespace NHibernate.SqlCommand
 			{
 				return Content;
 			}
+		}
+
+		internal SqlString ReplaceLast(string from, SqlString to)
+		{
+			var index = LastIndexOf(from, StringComparison.Ordinal);
+			return new SqlString(
+				Substring(0, index),
+				to,
+				Substring(index + from.Length));
 		}
 	}
 }

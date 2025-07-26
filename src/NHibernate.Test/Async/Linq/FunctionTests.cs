@@ -204,7 +204,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = await (query.ToListAsync());
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			await (ObjectDumper.WriteAsync(query));
 		}
 
@@ -220,7 +220,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = await (query.ToListAsync());
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			await (ObjectDumper.WriteAsync(query));
 		}
 
@@ -236,7 +236,7 @@ namespace NHibernate.Test.Linq
 						select lowerName;
 			var result = await (query.ToListAsync());
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			await (ObjectDumper.WriteAsync(query));
 		}
 
@@ -252,7 +252,7 @@ namespace NHibernate.Test.Linq
 						select lowerName.IndexOf("a", 1);
 			var result = await (query.ToListAsync());
 
-			Assert.That(result, Is.EqualTo(expected), "Expected {0} but was {1}", string.Join("|", expected), string.Join("|", result));
+			Assert.That(result, Is.EqualTo(expected), $"Expected {string.Join("|", expected)} but was {string.Join("|", result)}");
 			await (ObjectDumper.WriteAsync(query));
 		}
 
@@ -454,6 +454,33 @@ namespace NHibernate.Test.Linq
 		{
 			var query = from item in db.OrderLines
 						where item.Discount.Equals(-1)
+						select item;
+
+			await (ObjectDumper.WriteAsync(query));
+		}
+
+		[Test]
+		public async Task WhereEnumEqualAsync()
+		{
+			var query = from item in db.PatientRecords
+						where item.Gender.Equals(Gender.Female)
+						select item;
+
+			await (ObjectDumper.WriteAsync(query));
+
+			query = from item in db.PatientRecords
+					where item.Gender.Equals(item.Gender)
+					select item;
+
+			await (ObjectDumper.WriteAsync(query));
+		}
+
+
+		[Test]
+		public async Task WhereObjectEqualAsync()
+		{
+			var query = from item in db.PatientRecords
+						where ((object) item.Gender).Equals(Gender.Female)
 						select item;
 
 			await (ObjectDumper.WriteAsync(query));
